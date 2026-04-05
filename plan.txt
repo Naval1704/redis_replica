@@ -1,0 +1,149 @@
+
+  ---
+  Redis Replica — Project Plan
+
+  File Structure
+
+  E:/cse/redis_replica/
+  ├── CMakeLists.txt
+  ├── redis.conf
+  ├── src/
+  │   ├── main.cpp
+  │   ├── server.h / server.cpp          # TCP server (Winsock), event loop    
+  │   ├── resp_parser.h / resp_parser.cpp # RESP protocol parser + serializer  
+  │   ├── command_handler.h / command_handler.cpp
+  │   ├── store.h / store.cpp            # Key-value store + LRU
+  │   ├── lru_cache.h                    # Header-only LRU (list + map)        
+  │   ├── expiry_manager.h / expiry_manager.cpp  # Min-heap TTL
+  │   ├── pubsub.h / pubsub.cpp
+  │   ├── aof.h / aof.cpp               # AOF persistence + replay
+  │   └── config.h / config.cpp
+  ├── tests/
+  │   ├── test_resp_parser.cpp
+  │   ├── test_store.cpp
+  │   ├── test_expiry.cpp
+  │   └── test_aof.cpp
+  └── benchmark/
+      └── benchmark_client.cpp
+
+  ---
+  Build Order (10 Phases)
+
+  Phase: 1
+  What to Build: CMakeLists.txt + main.cpp skeleton (Winsock init/cleanup)     
+  Key Concepts to Read: CMake basics, WSAStartup/WSACleanup
+  ────────────────────────────────────────
+  Phase: 2
+  What to Build: config.h/cpp — parse key value lines from redis.conf 
+  Key Concepts to Read: Simple file I/O
+  ────────────────────────────────────────
+  Phase: 3
+  What to Build: resp_parser.h/cpp — RESP2 protocol parser + serializer        
+  Key Concepts to Read:
+  https://redis.io/docs/latest/develop/reference/protocol-spec/
+     — this is critical
+  ────────────────────────────────────────
+  Phase: 4
+  What to Build: server.h/cpp — non-blocking TCP with select() event loop      
+  Key Concepts to Read: Winsock select(), ioctlsocket(FIONBIO), FD_SET macros  
+  ────────────────────────────────────────
+  Phase: 5
+  What to Build: store.h/cpp + lru_cache.h — hash map + LRU eviction
+  Key Concepts to Read: std::list + std::unordered_map iterator trick for O(1) 
+    LRU
+  ────────────────────────────────────────
+  Phase: 6
+  What to Build: expiry_manager.h/cpp — min-heap for TTL
+  Key Concepts to Read: std::priority_queue with std::greater, lazy
+  invalidation
+  ────────────────────────────────────────
+  Phase: 7
+  What to Build: command_handler.h/cpp — dispatch table wiring
+    store+expiry+pubsub+aof
+  Key Concepts to Read: Command dispatch via std::unordered_map<string,        
+    function>
+  ────────────────────────────────────────
+  Phase: 8
+  What to Build: pubsub.h/cpp — channel subscriptions
+  Key Concepts to Read: RESP push messages: ["message", channel, payload]      
+  ────────────────────────────────────────
+  Phase: 9
+  What to Build: aof.h/cpp — append-only log + replay on startup
+  Key Concepts to Read: _commit(_fileno()) for fsync on Windows, RESP-encoded  
+    log format
+  ────────────────────────────────────────
+  Phase: 10
+  What to Build: Integration, benchmark client, polish
+  Key Concepts to Read: Signal handling (Ctrl+C), graceful shutdown
+
+  Phases 2, 3, 5, 6 are independent — you can build them in any order.
+
+  ---
+  What to Read Before Starting
+
+  1. Redis RESP Protocol Spec —
+  redis.io/docs/latest/develop/reference/protocol-spec/ (the entire project    
+  speaks this protocol)
+  2. Redis Internals: Eviction —
+  redis.io/docs/latest/develop/reference/eviction/ (understand LRU strategy)   
+  3. Redis Persistence (AOF section) —
+  redis.io/docs/latest/operate/oss_and_stack/management/persistence/
+  4. Winsock select() tutorial — look up "Winsock non-blocking server select" —
+   MS docs on select(), ioctlsocket, closesocket  
+  5. LRU Cache (LeetCode #146) — you've likely already solved this, same list +
+   map pattern
+
+  ---
+  Commands to Implement
+
+  ┌─────────────┬────────────────────┬─────────────────────────────────────┐   
+  │   Command   │       Syntax       │                Notes                │   
+  ├─────────────┼────────────────────┼─────────────────────────────────────┤   
+  │ PING        │ PING               │ Return +PONG\r\n                    │   
+  ├─────────────┼────────────────────┼─────────────────────────────────────┤   
+  │ SET         │ SET key value [EX  │ Log to AOF                          │   
+  │             │ sec]               │                                     │   
+  ├─────────────┼────────────────────┼─────────────────────────────────────┤   
+  │ GET         │ GET key            │ Check expiry first, touch LRU       │   
+  ├─────────────┼────────────────────┼─────────────────────────────────────┤   
+  │ DEL         │ DEL key [key ...]  │ Return count deleted, log to AOF    │   
+  ├─────────────┼────────────────────┼─────────────────────────────────────┤   
+  │ EXPIRE      │ EXPIRE key seconds │ Log to AOF                          │   
+  ├─────────────┼────────────────────┼─────────────────────────────────────┤   
+  │ TTL         │ TTL key            │ Return -1 (no ttl), -2 (not found), │   
+  │             │                    │  or seconds                         │   
+  ├─────────────┼────────────────────┼─────────────────────────────────────┤   
+  │ SUBSCRIBE   │ SUBSCRIBE ch [ch   │ Enter pub/sub mode                  │   
+  │             │ ...]               │                                     │   
+  ├─────────────┼────────────────────┼─────────────────────────────────────┤   
+  │ UNSUBSCRIBE │ UNSUBSCRIBE [ch    │ Exit pub/sub mode                   │   
+  │             │ ...]               │                                     │   
+  ├─────────────┼────────────────────┼─────────────────────────────────────┤   
+  │ PUBLISH     │ PUBLISH ch message │ Return subscriber count             │   
+  ├─────────────┼────────────────────┼─────────────────────────────────────┤   
+  │ DBSIZE      │ DBSIZE             │ Key count                           │   
+  ├─────────────┼────────────────────┼─────────────────────────────────────┤   
+  │ FLUSHDB     │ FLUSHDB            │ Clear everything                    │   
+  └─────────────┴────────────────────┴─────────────────────────────────────┘   
+
+  ---
+  Windows Gotchas
+
+  - #define FD_SETSIZE 1024 before #include <winsock2.h> (default is 64)       
+  - #define WIN32_LEAN_AND_MEAN before #include <windows.h>
+  - Use closesocket() not close()
+  - Use ioctlsocket(fd, FIONBIO, &mode) not fcntl()
+  - For fsync: _commit(_fileno(file_ptr)) or FlushFileBuffers()
+
+  ---
+  Test Strategy
+
+  - Phase 3: Unit test RESP parser with known byte sequences
+  - Phase 5: Unit test store GET/SET/DEL + LRU eviction order
+  - Phase 6: Unit test TTL expiration timing
+  - Phase 9: Test AOF replay reconstructs state correctly
+  - Phase 10: Connect with actual redis-cli and run all commands — it should   
+  just work since you speak RESP
+
+  Start with Phase 1 + 2 + 3. Once the RESP parser works, everything else      
+  builds on top of it. Good luck!
