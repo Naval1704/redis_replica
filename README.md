@@ -7,7 +7,7 @@ A Redis server replica built from scratch in C++ using Winsock on Windows.
 
 ## Build
 ```bash
-cd E:/cse/redis_replica
+cd project_path
 cmake -S . -B build
 cmake --build build
 ```
