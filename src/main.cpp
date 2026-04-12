@@ -1,6 +1,7 @@
 #include <iostream>
 #include <WinSock2.h>
 #include "config.h"
+#include "resp_parser.h"
 using namespace std;
 
 int main() {
@@ -27,6 +28,20 @@ int main() {
     Config config;
     config.load_config("redis.conf"); // laoding config file
     cout << config.get_config_value("port") << endl;
+
+    // parse RESP command
+    RESPParser parser;
+    string command = "*2\r\n$3\r\nGET\r\n$3\r\nkey\r\n";
+    vector<string> parsed_command = parser.parse(command);
+
+    for( const auto& res : parsed_command ) {
+        cout << res << " ";
+    }
+    cout << endl;
+
+    // serialize RESP response
+    string response = parser.serialize_simple_string("OK");
+    cout << response;
 
 
     WSACleanup();
