@@ -1,6 +1,6 @@
 #include <iostream>
 #include <WinSock2.h>
-
+#include "config.h"
 using namespace std;
 
 int main() {
@@ -23,8 +23,13 @@ int main() {
     // Initialization succeeded
     cout << "The Winsock 2.2 dll was found okay" << endl;
 
-    WSACleanup();
+    // read config file 
+    Config config;
+    config.load_config("redis.conf"); // laoding config file
+    cout << config.get_config_value("port") << endl;
 
+
+    WSACleanup();
     cout << "WSACleanup completed." << endl;
 
     return 0;
