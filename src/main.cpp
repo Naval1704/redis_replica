@@ -1,52 +1,29 @@
 #include <iostream>
-#include <WinSock2.h>
+#include "server.h"
 #include "config.h"
-#include "resp_parser.h"
 using namespace std;
 
 int main() {
-
-    WORD wVersionRequested; // Version of Winsock we want to use
-    WSADATA wsaData ; // Structure to hold information about the Windows Sockets implementation
-    int err ;
-
-    // MAKEWORD(2,2) creates a 16-bit value that represents the version of Winsock we want to use (2.2 in this case)
-    wVersionRequested = MAKEWORD(2,2);
-
-    err = WSAStartup(wVersionRequested, &wsaData);
-
-    // If WSAStartup returns a non-zero value, it indicates an error occurred during initialization
-    if( err != 0 ) {
-        cout << "WSAStartup failed with error: " << err << endl;
+    WSADATA wsaData;
+    if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
+        cout << "WSAStartup failed" << endl;
         return 1;
     }
 
-    // Initialization succeeded
-    cout << "The Winsock 2.2 dll was found okay" << endl;
-
-    // read config file 
     Config config;
-    config.load_config("redis.conf"); // laoding config file
-    cout << config.get_config_value("port") << endl;
+    config.load_config("redis.conf");
 
-    // parse RESP command
-    RESPParser parser;
-    string command = "*2\r\n$3\r\nGET\r\n$3\r\nkey\r\n";
-    vector<string> parsed_command = parser.parse(command);
-    for( const auto& res : parsed_command ) {
-        cout << res << " ";
-    }
-    cout << endl;
+    int port = stoi(config.get_config_value("port"));
+    int maxmemory = stoi(config.get_config_value("maxmemory"));
+    string aof_enabled = config.get_config_value("appendonly");
+    string aof_file = config.get_config_value("appendfilename");
 
-    // serialize RESP response
-    cout << parser.serialize_simple_string("OK") << endl;              
-    cout << parser.serialize_error("unknown command") << endl;                                                                          
-    cout << parser.serialize_integer(42) << endl;     
-    cout << parser.serialize_bulk_string("Hello") << endl;                                                                              
-    cout << parser.serialize_null() << endl; 
+    CommandHandler handler(maxmemory);
+    handler.init_aof(aof_file, aof_enabled == "yes");
+
+    Server server;
+    server.start(port, handler);
 
     WSACleanup();
-    cout << "WSACleanup completed." << endl;
-
     return 0;
 }
