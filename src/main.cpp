@@ -33,16 +33,17 @@ int main() {
     RESPParser parser;
     string command = "*2\r\n$3\r\nGET\r\n$3\r\nkey\r\n";
     vector<string> parsed_command = parser.parse(command);
-
     for( const auto& res : parsed_command ) {
         cout << res << " ";
     }
     cout << endl;
 
     // serialize RESP response
-    string response = parser.serialize_simple_string("OK");
-    cout << response;
-
+    cout << parser.serialize_simple_string("OK") << endl;              
+    cout << parser.serialize_error("unknown command") << endl;                                                                          
+    cout << parser.serialize_integer(42) << endl;     
+    cout << parser.serialize_bulk_string("Hello") << endl;                                                                              
+    cout << parser.serialize_null() << endl; 
 
     WSACleanup();
     cout << "WSACleanup completed." << endl;
